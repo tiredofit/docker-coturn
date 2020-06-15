@@ -1,0 +1,32 @@
+version: '3.7'
+services:
+  
+  coturn-app:
+    image: tiredofit/coturn:latest
+    container_name: coturn-app
+    volumes:
+    - ./data:/data
+    - ./logs:/var/log/coturn
+    environment:
+    - ZABBIX_HOSTNAME=coturn-app
+
+    - LISTENING_PORT=443
+    - ALT_LISTENING_PORT=3478
+    - LISTEN_IPS="111.222.250 112.233.250"
+    - SECRET=supersecretpassword
+    - REALM=turnserver.local
+    
+    - TLS_CERT=tls.crt
+    - TLS_KEY=tls.key
+    - DH_FILE=dhparam.pem
+    networks:
+      - internal
+      - services
+    restart: always
+
+networks:
+  internal:
+    external: false
+  services:
+    external: true
+

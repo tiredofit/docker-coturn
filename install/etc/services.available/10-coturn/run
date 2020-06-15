@@ -1,0 +1,11 @@
+#!/usr/bin/with-contenv bash
+
+for s in /assets/functions/*; do source $s; done
+PROCESS_NAME="coturn"
+
+check_container_initialized
+check_service_initialized init
+
+liftoff
+print_info "Starting coturn ${COTURN_VERSION}"
+exec /usr/bin/turnserver -c ${CONFIG_PATH}${CONFIG_FILE}

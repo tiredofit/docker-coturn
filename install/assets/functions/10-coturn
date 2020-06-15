@@ -1,0 +1,845 @@
+#!/usr/bin/with-contenv bash
+
+## Defaults
+AUTHENTICATION_MODE=${AUTHENTICATION_MODE:-"BASIC"}
+AUTHENTICATION_REST_PASS=${AUTHENTICATION_REST_PASS:-"admin"}
+BPS_CAPACITY=${BPS_CAPACITY:-6400000} # 50 Mbit/second
+BPS_MAX=${BPS_MAX:-640000} # 5Mbit/second per TURN session
+CONFIG_FILE=${CONFIG_FILE:-"turnserver.conf"}
+CONFIG_PATH=${CONFIG_PATH:-"/etc/coturn/"}
+COTURN_GROUP=${COTURN_GROUP:-"coturn"}
+COTURN_USER=${COTURN_USER:-"coturn"}
+CREDENTIALS_FILE=${CREDENTIALS_FILE:-"/data/credentials"}
+DB_CONNECT_TIMEOUT=${DB_CONNECT_TIMEOUT:-"10"}
+DB_READ_TIMEOUT=${DB_READ_TIMEOUT:-"10"}
+DB_SQLITE_FILE=${DB_SQLITE_FILE:-"/data/turnserver.db"}
+DB_TYPE=${DB_TYPE:-"SQLITE"}
+ENABLE_CHECK_ORIGIN_CONSISTENCY=${ENABLE_CHECK_ORIGIN_CONSISTENCY:-"FALSE"}
+ENABLE_CLI=${ENABLE_CLI:-"TRUE"}
+ENABLE_DTLS=${ENABLE_DTLS:-"TRUE"}
+ENABLE_KEEP_ADDRESS_FAMILY=${ENABLE_KEEP_ADDRESS_FAMILY:-"FALSE"}
+ENABLE_LOOPBACK_PEERS=${ENABLE_LOOPBACK_PEERS:-"FALSE"}
+ENABLE_MICE=${ENABLE_MICE:-"FALSE"}
+ENABLE_MULTICAST_PEERS=${ENABLE_MULTICAST_PEERS:-"TRUE"}
+ENABLE_OAUTH=${ENABLE_OAUTH:-"FALSE"}
+ENABLE_STUN=${ENABLE_STUN:-"TRUE"}
+ENABLE_STUN_SECURE=${ENABLE_STUN_SECURE:-"FALSE"}
+ENABLE_TCP=${ENABLE_TCP:-"TRUE"}
+ENABLE_TCP_RELAY=${ENABLE_TCP_RELAY:-"TRUE"}
+ENABLE_TCP_REVERSE_PROXY=${ENABLE_TCP_REVERSE_PROXY:-"FALSE"}
+ENABLE_TLS=${ENABLE_TLS:-"TRUE"}
+ENABLE_TURN=${ENABLE_TURN:-"TRUE"}
+ENABLE_UDP=${ENABLE_UDP:-"TRUE"}
+ENABLE_UDP_RELAY=${ENABLE_UDP_RELAY:-"TRUE"}
+ENABLE_VERSION_OUTPUT=${ENABLE_VERSION_OUTPUT:-"FALSE"}
+ENABLE_WEBADMIN=${ENABLE_WEBADMIN:-"TRUE"}
+HIDE_SOFTWARE_VERSION=${HIDE_SOFTWARE_VERSION:-"TRUE"}
+LIFETIME_CHANNEL=${LIFETIME_CHANNEL:-"600"}
+LIFETIME_MAX_ALLOCATE=${LIFETIME_MAX_ALLOCATE:-"3600"}
+LIFETIME_PERMISSION=${LIFETIME_PERMISSION:-"300"}
+LIFETIME_STALE_NONCE=${LIFETIME_STALE_NONCE:-"600"}
+LISTEN_IP_CLI=${LISTEN_IP_CLI:-"127.0.0.1"}
+LISTEN_IP_WEBADMIN=${LISTEN_IP_WEBADMIN:-"127.0.0.1"}
+LISTEN_PORT=${LISTEN_PORT:-"3478"}
+LISTEN_PORT_ALT=${LISTEN_PORT_ALT:-"0"}
+LISTEN_PORT_CLI=${LISTEN_PORT_CLI:-"5766"}
+LISTEN_PORT_TLS=${LISTENING_PORT_TLS:-"5349"}
+LISTEN_PORT_TLS_ALT=${LISTENING_PORT_TLS_ALT:-"0"}
+LISTEN_PORT_WEBADMIN=${LISTEN_PORT_WEBAMIN:-"8080"}
+LOG_FILE=${LOG_FILE:-"coturn.log"}
+LOG_LEVEL=${LOG_LEVEL:-"DEBUG"}
+LOG_LEVEL=${LOG_LEVEL:-NORMAL}
+LOG_PATH=${LOG_PATH:-"/logs/"}
+LOG_TYPE=${LOG_TYPE:-"FILE"}
+MAX_PORT=${MAX_PORT:-65535}
+MIN_PORT=${MIN_PORT:-49152}
+QUOTA_TOTAL=${QUOTA_TOTAL:-300}
+QUOTA_USER=${QUOTA_USER:-100}
+REALM=${REALM:-localdomain}
+SECRET=${SECRET:-password}
+SETUP_TYPE=${SETUP_TYPE:-"AUTO"}
+TCP_REVERSE_PROXY_PORT=${TCP_REVERSE_PROXY_PORT:-"5555"}
+TIMEOUT_MAX_ALLOCATE=${TIMEOUT_MAX_ALLOCATE:-"60"}
+TLS_CA_FILE=${TLS_CA_FILE:-""}
+TLS_CERT_FILE=${TLS_CERT_FILE:-"/certs/cert.pem"}
+TLS_CIPHER_LIST=${TLS_CIPHER_LIST:-"DEFAULT"}
+TLS_DH_PARAM_FILE=${TLS_DH_PARAM_FILE:-"/certs/dhparam.pem"}
+TLS_DH_PARAM_KEYSIZE=${TLS_DH_PARAM_KEYSIZE:-"2066"}
+TLS_EC_CURVE_NAME=${TLS_EC_CURVE_NAME:-"prime256v1"}
+TLS_KEY_FILE=${TLS_KEY_FILE:-"/certs/key.pem"}
+TLS_VERIFY_CLIENT=${TLS_VERIFY_CLIENT:-"FALSE"}
+WEBADMIN_LISTEN_ON_WORKERS=${WEBADMIN_LISTEN_ON_WORKERS:-"FALSE"}
+
+certificates() {
+	CA_NAME=turnserver-selfsigned-ca
+	CA_SUBJECT=${CA_SUBJECT:-"/C=XX/ST=Turn Server/L=Turn Server/O=Turn Server/CN="}
+	CA_CERT_SUBJECT=${CA_CERT_SUBJECT:-${CA_SUBJECT}${CA_NAME}}
+	CA_CERT_FILE=${CA_CERT_FILE:-"/certs/${CA_NAME}/${CA_NAME}.crt"}
+	CA_KEY_FILE=${CA_KEY_FILE:-"`dirname ${CA_CERT_FILE}`/${CA_NAME}.key"}
+	TLS_CA_CERT_FILE=${TLS_CA_CERT_FILE:-"${CA_CERT_FILE}"}
+	CREATE_CA=${CREATE_CA:-"TRUE"}
+
+	certificates_create_certificate_authority() {
+		if [ ! -f ${CA_CERT_FILE} ] ; then
+
+			print_debug "Certificates: Creating Self Signed Certificate Authority"
+			mkdir -p `dirname ${CA_CERT_FILE}`
+			echo "000a" > `dirname ${CA_CERT_FILE}`/serial
+			touch `dirname ${CA_CERT_FILE}`/certindex
+
+			silent eval "libressl req \
+			      -newkey rsa:4096 -keyout ${CA_KEY_FILE} \
+			      -x509 -days 3650 -nodes -out ${CA_CERT_FILE} \
+			      -subj \"${CA_CERT_SUBJECT}\""
+
+			cat > `dirname ${CA_CERT_FILE}`/$CA_NAME.conf << EOF
+			[ ca ]
+			default_ca = $CA_NAME
+
+			[ $CA_NAME ]
+			unique_subject = no
+			new_certs_dir = .
+			certificate = ${CA_CERT_FILE}
+			database = `dirname ${CA_CERT_FILE}`/certindex
+			private_key = ${CA_KEY_FILE}
+			serial = `dirname ${CA_CERT_FILE}`/serial
+			default_days = 3650
+			default_md = default
+			policy = ${CA_NAME}_policy
+			x509_extensions = ${CA_NAME}_extensions
+
+			[ ${CA_NAME}_policy ]
+			commonName = supplied
+			stateOrProvinceName = supplied
+			countryName = supplied
+			emailAddress = optional
+			organizationName = supplied
+			organizationalUnitName = optional
+
+			[ ${CA_NAME}_extensions ]
+			basicConstraints = CA:false
+			subjectKeyIdentifier = hash
+			authorityKeyIdentifier = keyid:always
+			keyUsage = digitalSignature,keyEncipherment
+			extendedKeyUsage = serverAuth,clientAuth
+
+			[ req ]
+			default_bits		= 2048
+
+			[default_conf]
+			ssl_conf = ssl_sect
+
+			[ssl_sect]
+			system_default = system_default_sect
+
+			[system_default_sect]
+			MinProtocol = TLSv1.1
+			MaxProtocol = TLSv1.2
+			CipherString = DEFAULT
+EOF
+	    else
+	        print_debug "Certificates: CA Already Exists"
+		fi
+	}
+
+	certificates_create_certificate() {
+	    if [ "$1" != "" ] ; then
+
+	    	if var_true $CREATE_CA ; then
+		        if [ ! -f ${CA_CERT_FILE} ] || [ ! -f ${CA_KEY_FILE} ] ; then
+					print_debug "Certificates: No CA Found - Creating before generating certificates"
+					certificates_create_certificate_authority
+				fi
+			fi            
+            CERT_SUBJECT="${CA_SUBJECT}$(basename ${1%%.*})"
+
+	    	if var_true $CREATE_CA ; then
+				if [ ! -f ${1%%.*}.key ] ; then
+					print_debug "Certificates: Creating Certificate: ${1}"
+					silent eval "libressl req \
+			      		  -newkey rsa:2048 -keyout ${1%%.*}.key \
+					      -nodes -out ${1%%.*}.csr \
+					      -subj \"${CERT_SUBJECT}\""
+				fi
+			else
+				if [ ! -f ${1%%.*}.key ] ; then
+					print_debug "Certificates: Creating Certificate: ${1}"
+					silent eval "libressl req \
+						  -new -x509 -nodes -days 3650 
+						  -config /tmp/libressl.cnf 
+						  -out ${1%%.*}.crt \
+						  -keyout ${1%%.*}.key"
+				fi
+			fi
+
+	    	if var_true $CREATE_CA ; then
+				if [ ! -f ${1%%.*}.cert ] ; then
+					print_debug "Certificates: Signing Certificate: ${1}"
+					silent eval "libressl ca -batch -config `dirname ${CA_CERT_FILE}`/${CA_NAME}.conf -notext -in ${1%%.*}.csr -out ${1%%.*}.crt"
+					rm -rf $(tail -n 1 $(dirname ${CA_CERT_FILE})/certindex | awk '{print $3}').pem
+					rm -rf ${1%%.*}.csr
+				fi
+			fi
+
+			if [ -f ${1%%.*}.crt ] && [ -f ${1%%.*}.key ] ; then
+				print_debug "Certificates: Merging Certificate and Key for: ${1}"
+	   			cat ${1%%.*}.crt ${1%%.*}.key > ${1%%.*}.pem
+			fi
+
+			if [ ! -f ${1%%.*}-public.pem ] ; then
+				print_debug "Certificates: Creating Public Key for: ${1}"
+				silent libressl rsa -in ${1%%.*}.pem -out ${1%%.*}-public.pem -outform PEM -pubout
+			fi
+		fi
+	}
+
+    certificates_check_permissions() {
+		if sudo -u coturn [ ! -r "${1}" ] ; then
+    		print_debug "Certificates: Setting Read Permissions on ${1}"
+    		chmod 444 ${1}
+    	fi
+    }
+
+	certificates_check_certificates() {
+		print_debug "Certificates: Checking Existence of ${1}"
+		if [ ! -f ${1} ] ; then
+			    mkdir -p `dirname ${1}`
+			    certificates_create_certificate ${1}
+		fi
+	}
+
+	certificates_check_dhparam() {
+		print_debug "Certificates: DH Param - Checking Existence of ${TLS_SERVER_DH_PARAM_FILE}"
+		if [ ! -f TLS_DH_PARAM_FILE ] ; then
+			    certificates_create_dhparam
+		fi
+	}
+
+    certificates_create_dhparam() {
+		print_notice "Certificates: DH Param - Creating ${TLS_DH_PARAM_FILE}"
+		mkdir -p `dirname ${TLS_DH_PARAM_FILE}`
+		silent libressl dhparam -out ${TLS_DH_PARAM_FILE} ${TLS_DH_PARAM_KEYSIZE}
+    }
+
+	certificates_trust_ca() {
+		if var_true $CREATE_CA ; then
+			if [ -f ${CA_CERT_FILE} ]; then
+				if [ ! -L /usr/local/share/ca-certificates/`basename ${CA_CERT_FILE}` ] ; then
+					print_debug "Certificates: Trusting CA ${CA_NAME}"
+					ln -sf ${CA_CERT_FILE} /usr/local/share/ca-certificates/
+					silent update-ca-certificates
+				fi
+			fi
+		fi
+	}
+
+	case "$1" in
+	"DHPARAM" | "dhparam" )
+        certificates_check_dhparam
+    ;;
+	*)
+		certificates_check_certificates ${1}
+		certificates_check_permissions ${1}
+		certificates_trust_ca
+	;;
+	esac
+}
+
+configure_logging() {
+    print_debug "Configuring Logging"
+    case "$LOG_TYPE" in
+		"FILE" | "file" )
+		    mkdir -p ${LOG_PATH}
+		    chown -R root: ${LOG_PATH}
+		    sed -i -e "s#<LOG_LOCATION>#${LOG_PATH}#g" /etc/logrotate.d/coturn
+		    logging=$(cat<<EOF
+log-file=${LOG_PATH}${LOG_FILE}
+no-stdout-log
+simple-log
+EOF
+            )
+		;;
+		"CONSOLE" | "console" )
+		    logging=$(cat<<EOF
+log-file=-
+EOF
+            )
+            rm -rf /etc/logrotate.d/coturn
+		;;
+		"BOTH" | "both" )
+		    mkdir -p ${LOG_PATH}
+		    chown -R root: ${LOG_PATH}
+		    sed -i -e "s#<LOG_LOCATION>#${LOG_PATH}#g" /etc/logrotate.d/coturn
+		    logging=$(cat<<EOF
+log-file=${LOG_PATH}${LOG_FILE}
+no-stdout-log
+simple-log
+EOF
+            )
+		;;
+	esac
+
+    ### Translate Logging
+    case "$LOG_LEVEL" in
+        "VERBOSE" | "verbose" )
+	        log_level=$(cat<<EOF
+verbose
+EOF
+    	        )
+        ;;
+        "NORMAL" | "normal" )
+        	:
+        ;;
+        "DEBUG" | "debug" )
+        	log_level=$(cat<<EOF
+verbose
+Verbose
+EOF
+            	)
+        ;;
+    esac
+}
+
+create_config() {
+    if [ "$SETUP_TYPE" = "AUTO" ]; then
+    print_notice "Auto Configuring Coturn"
+
+	case "${DB_TYPE}" in
+	    "SQLITE3" | "SQLITE" | "sqlite" | "sqlite3" )
+	        print_debug "Setting SQLite3 DB Type"
+	        mkdir -p $(dirname ${DB_SQLITE_FILE})
+	        chown -R ${COTURN_USER}:${COTURN_GROUP} $(dirname $DB_SQLITE_FILE)
+            db_string="userdb=${DB_SQLITE_FILE}"
+	    ;;
+	    "MONGODB" | "mongodb" | "MONGO" | "mongo" )
+	        print_debug "Setting Mongo DB Type"
+	        DB_PORT=${DB_PORT:-"27017"}
+            sanity_db mongo 
+            db_ready mongo
+            db_string="mongo-userdb=\"mongodb://[${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}\""
+	    ;;
+	    "MYSQL" | "mysql" | "MARIADB" | "MARIADB" )
+	        print_debug "Setting MariaDB DB Type"
+	        DB_PORT=${DB_PORT:-"3306"}
+            sanity_db mariadb 
+            db_ready mariadb
+            db_string="mysql-userdb=\"host=${DB_HOST} dbname=${DB_NAME} user=${DB_USER} password=${DB_PASS} port=${DB_PORT} connect_timeout=${DB_TIMEOUT_CONNECT} read_timeout=${DB_TIMEOUT_READ}\""
+	    ;;
+	    "POSTGRES" | "postgres" | "PSQL" | "psql" | "POSTGRESQL" | "postgresql" )
+	        print_debug "Setting Postgres DB Type"
+	        DB_PORT=${DB_PORT:-"5472"}
+            sanity_db postgres 
+            db_ready postgres
+            db_string="psql-userdb=\"host=${DB_HOST} dbname=${DB_NAME} user=${DB_USER} password=${DB_PASS} connect_timeout=${DB_TIMEOUT_CONNECT}\""
+	    ;;
+	    "REDIS" | "redis" | "MARIADB" | "MARIADB" )
+	        print_debug "Setting Redis Data Type"
+	        DB_PORT=${DB_PORT:-"6379"}
+            DB_NAME=${DB_NAME:-"0"}
+            sanity_db redis
+            db_ready redis
+        	db_string=$(cat<<EOF
+db_string="redis-userdb=\"ip=${DB_HOST} dbname=${DB_NAME} password=${DB_PASS} port=${DB_PORT} connect_timeout=${DB_TIMEOUT_CONNECT}\""
+db_string="redis-statsdb=\"ip=${DB_HOST} dbname=${DB_NAME} password=${DB_PASS} port=${DB_PORT} connect_timeout=${DB_TIMEOUT_CONNECT}\""
+EOF
+            )
+	    ;;
+	esac
+
+    if var_true $ENABLE_TCP_REVERSE_PROXY ; then
+        print_debug "Enabling Reverse Proxy Support on port ${TCP_REVERSE_PROXY_PORT}"
+        tcp_reverse_proxy_port=$(cat<<EOF
+tcp-proxy-port=${TCP_REVERSE_PROXY_PORT}
+EOF
+            )
+    fi
+
+	if [ -n "${LISTEN_IP}" ]; then
+		listen_ip_array=$(echo $LISTEN_IP | tr "," "\n")
+		for ip in $listen_ip_array
+	        do
+	        print_debug "Updating Listen IP with ${ip}"
+	        listen_ip=$(echo "${listen_ip}" ; cat<<EOF
+listening-ip=${LISTEN_IP}
+EOF
+            )
+	    done
+	fi
+
+    if [ -n "${ALTERNATE_SERVER}" ] ; then
+        print_debug "Setting Alternate Server ${ALTERNATE_SERVER}"
+        alternate_server=$(cat<<EOF
+alternate-server=${ALTERNATE_SERVER}
+EOF
+        )
+    fi
+	
+	if [ -n "${AUX_SERVER}" ]; then
+		aux_server_array=$(echo $AUX_SERVER | tr "," "\n")
+		for aux in $aux_server_array
+	        do
+	        print_debug "Updating Aux Server with ${aux}"
+	        listen_ip=$(echo "${listen_ip}" ; cat<<EOF
+aux-server=${AUX_SERVER}
+EOF
+            )
+	    done
+	fi
+
+	if [ -n "${RELAY_IP}" ]; then
+		relay_ip_array=$(echo $RELAY_IP | tr "," "\n")
+		for ip in $relay_ip_array
+        	do
+        	print_debug "Updating Relay IP with ${ip}"
+        	relay_ip=$(echo "${relay_ip}" ; cat<<EOF
+relay-ip=${RELAY_IP}
+EOF
+            )
+    	done
+    fi
+
+    if [ -n "${PEER_IP_DENY}" ] ; then
+        print_debug "Denying IP(s) ${PEER_IP_DENY}"
+        peer_ip_deny=$(cat<<EOF
+denied-peer-ip=${PEER_IP_DENY}
+EOF
+        )
+    fi
+
+    if [ -n "${PEER_IP_ALLOW}" ] ; then
+        print_debug "Allow IP(s) ${PEER_IP_ALLOW}"
+        peer_ip_allow=$(cat<<EOF
+allowed-peer-ip=${PEER_IP_ALLOW}
+EOF
+        )
+    fi
+
+
+
+	if [ -n "${EXTERNAL_IP}" ]; then
+		external_ip_array=$(echo $EXTERNAL_IP | tr "," "\n")
+		for ip in $external_ip_array
+        	do
+        	print_debug "Updating External IP with ${ip}"
+        	external_ip=$(echo "${external_ip}" ; cat<<EOF
+external-ip=${EXTERNAL_IP}
+EOF
+            )
+    	done
+    fi
+
+    if [ -n "${RELAY_THREADS}" ] ; then
+        print_debug "Setting Relay Threads to ${RELAY_THREADS}"
+        relay_threads=$(cat<<EOF
+relay-threads=${RELAY_THREADS}
+EOF
+            )
+    fi
+
+    if var_true $ENABLE_FINGERPRINT ; then
+        print_debug "Enabling Fingerprints in TURN messages"
+        fingerprint=$(cat<<EOF
+fingerprint
+EOF
+            )
+    fi
+
+	if [ -n "${OAUTH_SERVER_NAME}" ]; then
+        oauth_server_name=$(cat<<EOF
+server-name=${OAUTH_SERVER_NAME}
+EOF
+            )
+    fi
+
+    if var_true $ENABLE_STUN_SECURE ; then
+        print_debug "Enabling Secure STUN support"
+        secure_stun=$(cat<<EOF
+secure_stun
+EOF
+            )
+    fi
+
+    if var_true $ENABLE_MICE ; then
+        print_debug "Enabling ICE mobility"
+        mice=$(cat<<EOF
+mobility
+EOF
+            )
+    fi
+
+    if var_true $ENABLE_KEEP_ADDRESS_FAMILY ; then
+        print_debug "Enabling Allocate Address Family (Breaks RFC6156)"
+        keep_address_family=$(cat<<EOF
+keep-address-family
+EOF
+            )
+    fi
+
+    if var_true $WEBADMIN_LISTEN_ON_WORKERS ; then
+            print_debug "Webadmin: Enabling Listen on Workers (Turn off in Production!)"
+            webadmin=$(echo "${webadmin}" ; cat<<EOF
+web-admin-listen-on-workers
+EOF
+            )
+    fi
+
+    if var_true $ENABLE_SERVER_RELAY ; then
+        print_debug "Enabling Server Relay (This is Dangerous!)"
+        server_relay=$(cat<<EOF
+server-relay
+EOF
+            )
+    fi
+
+    if var_true $HIDE_SOFTWARE_VERSION ; then
+        print_debug "Hiding Software Version"
+        hide_software_version=$(cat<<EOF
+no-software-attribute
+EOF
+            )
+    fi
+
+    if var_false $ENABLE_UDP ; then
+        no_udp=$(cat<<EOF
+no-udp
+EOF
+            )
+    fi
+
+    if var_false $ENABLE_TCP ; then
+        no_tcp=$(cat<<EOF
+no-tcp
+EOF
+            )
+    fi
+
+    if var_false $ENABLE_UDP_RELAY ; then
+        no_udp_relay=$(cat<<EOF
+no-udp-relay
+EOF
+            )
+    fi
+
+    if var_false $ENABLE_TCP_RELAY ; then
+        no_tcp_relay=$(cat<<EOF
+no-tcp-relay
+EOF
+            )
+    fi
+
+## TLS Info needs work
+    if var_false $ENABLE_TLS ; then
+        no_tls=$(cat<<EOF
+no-tls
+EOF
+            )
+    else
+    	certificates dhparam
+    	certificates $TLS_CERT_FILE
+		if [ -n "${TLS_DISABLE_VERSION}" ]; then
+			disable_tls_version_array=$(echo $TLS_DISABLE_VERSION | tr "," "\n")
+			for version in $disable_tls_version
+		        do
+		        print_debug "TLS: Disabling TLS Version ${version}"
+		        disable_tls_version=$(echo "${disable_tls_version}" ; cat<<EOF
+no-${version}
+EOF
+	            )
+		    done
+		fi
+
+        if [ -n "${TLS_KEY_PASSWORD}" ] ; then
+            pkey_password=$(cat<<EOF
+pkey_password=${TLS_KEY_PASSWORD}
+EOF
+            )
+        fi
+
+	    if var_true $TLS_VERIFY_CLIENT ; then
+	        print_debug "TLS: Enabling Client certificate verification"
+	        tls_verify_client=$(cat<<EOF
+CA-file=${TLS_CA_CERT_FILE}
+EOF
+            )
+    	fi
+
+		tls_listening_port=$(cat<<EOF
+tls-listening-port=${LISTEN_PORT_TLS}
+EOF
+					)
+
+		alt_tls_listening_port=$(cat <<EOF
+alt-tls-listening-port=${LISTEN_PORT_TLS_ALT}
+EOF
+					)
+
+        if [ -n "${ALTERNATE_SERVER_TLS}" ] ; then
+            print_debug "Setting TLS Alternate Server ${ALTERNATE_SERVER}"
+            alternate_server_tls=$(cat<<EOF
+tls-alternate-server=${ALTERNATE_SERVER_TLS}
+EOF
+            )
+        fi
+
+tls=$(cat<<EOF
+## TLS
+${tls_listening_port}
+${alt_tls_listening_port}
+cert=${TLS_CERT_FILE}
+pkey=${TLS_KEY_FILE}
+${pkey_password}
+cipher-list="${TLS_CIPHER_LIST}"
+${tls_verify_client}
+ec-curve-name=${TLS_EC_CURVE_NAME}
+dh-file=${TLS_DH_PARAM_FILE}
+${disable_tls_version}
+${tls-alternate-server}
+EOF
+	)
+    fi
+
+    if var_false $ENABLE_DTLS ; then
+        no_dtls=$(cat<<EOF
+no-dtls
+EOF
+            )
+    fi
+
+    if var_false $ENABLE_TURN ; then
+        stun_only=$(cat<<EOF
+stun-only
+EOF
+            )
+    fi
+
+    if var_false $ENABLE_STUN ; then
+        turn_only=$(cat<<EOF
+no-stun
+EOF
+            )
+    fi
+
+    if var_true $ENABLE_CHECK_ORIGIN_CONSISTENCY ; then
+        print_debug "Enabling Checking Origin Consistency"
+        enable_origin_consistency=$(cat<<EOF
+check-origin-consistency
+EOF
+            )
+    fi
+
+    if var_true $ENABLE_LOOPBACK_PEERS ; then
+        print_debug "Enabling Lopback Peers (Security Vulnerability!)"
+        enable_loopback_peers=$(cat<<EOF
+allow-loopback-peers
+EOF
+            )
+    fi
+
+    if var_false $ENABLE_MULTICAST_PEERS ; then
+        print_debug "Disabling Multicast Peers"
+        enable_multicast_peers=$(cat<<EOF
+no-multicast-peers
+EOF
+            )
+    fi
+
+    if var_true $ENABLE_UDP_SELF_BALANCE ; then
+        print_debug "Enabling Self Balancing UDP Support"
+        udp_self_balance=$(cat<<EOF
+udp-self-balance
+EOF
+            )
+    fi
+
+	case "${AUTHENTICATION_MODE}" in
+	    "NONE" | "none" | "ANONYMOUS" | "ANONYMOUS" )
+            print_debug "Setting Authentication Mode to Anonymous (Are you sure?)"
+            authentication=$(cat<<EOF
+no-auth
+EOF
+                			)
+        ;;
+	    "BASIC" | "basic" | "LONGTERM" | "longterm" )
+            print_debug "Setting Authentication Mode to Basic (Longterm)"
+            if [ ! -f "$CREDENTIALS_FILE" ]; then
+            	print_notice "No Credentials File, Creating User Account: coturn Password: coturn"
+            	echo "coturn:coturn" > ${CREDENTIALS_FILE}
+            fi
+            print_debug "Parsing Credentials File"
+            while IFS="" read -r line || [ -n "$line" ]
+                do
+                if [[ "${line}" == *":"* ]] ; then
+                    username=$(echo $line | cut -d : -f 1)
+                    password=$(echo $line | cut -d : -f 2)
+                    credentials=$(echo "${credentials}" ;cat<<EOF
+
+user=${username}:${password}
+
+EOF
+		                            )
+                fi
+                done < ${CREDENTIALS_FILE}
+            authentication=$(cat<<EOF
+${credentials}
+
+lt-cred-mech
+
+
+EOF
+            			    )
+        ;;
+	    "SECRET" | "secret" | "TIMELIMITED" | "timelimited" )
+            print_debug "Setting Authentication Mode to Secrets (Time limited)"
+            if [ ! -f "$CREDENTIALS_FILE" ]; then
+            	print_notice "No Credentials File, Creating User Account: coturn"
+            	echo "coturn:coturn" > ${CREDENTIALS_FILE}
+            fi
+            print_debug "Parsing Credentials File"
+            while IFS="" read -r line || [ -n "$line" ]
+                do
+                if [[ "${line}" == *":"* ]] ; then
+                    username=$(echo $line | cut -d : -f 1)
+                    password=$(echo $line | cut -d : -f 2)
+                    keyfile=$(turnadmin -k -u ${username} -p ${password})
+                    credentials=$(echo "${credentials}"; cat<<EOF
+user=${username}:${keyfile}
+
+EOF
+    		                    )
+                fi
+            done < ${CREDENTIALS_FILE}
+            authentication=$(cat<<EOF
+use-auth-secret
+
+${credentials}
+EOF
+							)
+        ;;
+    esac
+
+
+    if var_true $ENABLE_OAUTH ; then
+        print_debug "Enabling OAuth"
+        enable_oauth=$(cat<<EOF
+oauth
+EOF
+            )
+    fi
+
+    if [ -n "${AUTHENTICATION_REST_PASS}" ]; then
+        authentication=$(echo $authentication; cat<<EOF
+static-auth-secret=${AUTHENTICATION_REST_PASS}
+EOF
+  					  )
+    fi
+
+    if var_true $ENABLE_CLI ; then
+        print_debug "Enabling CLI"
+        cli=$(cat<<EOF
+cli-ip=${LISTEN_IP_CLI}
+cli-port=${LISTEN_PORT_CLI}
+EOF
+            )
+    fi
+
+        if [ -n "${CLI_PASS}" ] ; then
+            print_debug "CLI: Setting Password"
+            cli=$(echo "${cli}" ; cat<<EOF
+cli-password=${CLI_PASS}
+EOF
+            )
+        fi
+    else
+        print_debug "Disabling CLI"
+        cli=$(cat<<EOF
+no-cli
+EOF
+            )
+    fi
+
+    if var_true $ENABLE_WEBADMIN ; then
+        print_debug "Enabling WEBADMIN"
+        webadmin=$(cat<<EOF
+web-admin
+web-admin-ip=${LISTEN_IP_WEBADMIN}
+web-admin-port=${LISTEN_PORT_WEBADMIN}
+EOF
+            )
+    fi
+
+	cat <<EOF > ${CONFIG_PATH}${CONFIG_FILE}
+# Custom Generated Kopano GRAPI Server Configuration! Do not edit, instead set ENV Vars
+# If you want to use your own configuration files set SETUP_TYPE=MANUAL when starting container
+# Last Generated on `date`
+
+## Process Options
+proc-user=${COTURN_USER}
+proc-group=${COTURN_GROUP}
+pidfile="/var/run/turnserver.pid"
+
+## DB
+${db_string}
+
+## Logging
+${logging}
+${log_level}
+
+## Interface and Networking
+${listen_ip}
+listening-port=${LISTEN_PORT}
+alt-listening-port=${LISTEN_PORT_ALT}
+${aux_server}
+${relay_ip}
+${external_ip}
+min-port=${MIN_PORT}
+max-port=${MAX_PORT}
+${peer_ip_deny}
+${peer_ip_allow}
+
+${no_udp}
+${no_tcp}
+${no_tls}
+${no_dtls}
+${no_udp_relay}
+${no_tcp_relay}
+
+${tls}
+
+## Authentication
+${authentication}
+${oauth}
+${oauth_server_name}
+${realm}
+
+## CLI Interface
+${cli}
+
+## Web Admin
+${web_admin}
+
+## Settings
+${enable_loopback_peers}
+${enable_multicast_peers}
+${enable_origin_consistency}
+${fingerprint}
+${hide_software_version}
+${keep_address_family}
+${mice}
+${relay_threads}
+${secure_stun}
+${server_relay}
+${stun_only}
+${turn_only}
+${udp_self_balance}
+bps-capacity=${BPS_CAPACITY}
+channel-lifetime=${LIFETIME_CHANNEL}
+max-allocate-lifetime=${LIFETIME_MAX_ALLOCATE}
+max-allocate-timeout=${TIMEOUT_MAX_ALLOCATE}
+max-bps=${BPS_MAX}
+permission-lifetime=${LIFETIME_PERMISSION}
+stale-nonce=${LIFETIME_STALE_NONCE}
+total-quota=${QUOTA_TOTAL}
+user-quota=${QUOTA_USER}
+EOF
+}
+
