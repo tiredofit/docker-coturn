@@ -1,6 +1,6 @@
 # hub.docker.com/tiredofit/coturn
 
-## Introduction
+## About
 
 This will build a container for [coturn](https://github.com/coturn/coturn). A STUN and TURN server for WebRTC and other media
 applications allowing for NAT traversal.
@@ -11,7 +11,7 @@ This Container uses [tiredofit:alpine:3.7](https://hub.docker.com/r/tiredofit/al
 
 [Changelog](CHANGELOG.md)
 
-## Authors
+## Maintainer
 
 - [Dave Conroy] [https://github.com/tiredofit]
 
@@ -32,7 +32,7 @@ This Container uses [tiredofit:alpine:3.7](https://hub.docker.com/r/tiredofit/al
       - [Shell Access](#shell-access)
 - [References](#references)
 
-## Prerequisites
+## Prerequisites and Assumptions
 
 ## Installation
 
@@ -52,7 +52,7 @@ docker pull hub.docker.com/tiredofit/coturn
 
 ## Configuration
 
-### Data-Volumes
+### Persistent Storage
 
 The following directories are used for configuration and can be mapped for persistent storage.
 

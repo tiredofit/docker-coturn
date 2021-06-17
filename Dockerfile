@@ -1,7 +1,7 @@
-FROM tiredofit/alpine:3.13
-LABEL maintainer="Dave Conroy (dave at tiredofit dot ca)"
+FROM tiredofit/alpine:3.14
+LABEL maintainer="Dave Conroy (github.com/tiredofit)"
 
-ENV COTURN_VERSION=4.5.1.2
+ENV COTURN_VERSION=4.5.2
 
 ### Build Dependencies
 RUN set -x && \
@@ -16,11 +16,11 @@ RUN set -x && \
         g++ \
         hiredis-dev \
         libevent-dev \
-        libressl-dev \
         libtool \
         linux-headers \
         mariadb-connector-c-dev \
         mongo-c-driver-dev \
+        libressl-dev \
         postgresql-dev \
         sqlite-dev \
         && \
@@ -33,9 +33,9 @@ RUN set -x && \
         libpq \
         libssl1.1 \
         libstdc++ \
-        libressl \
         mariadb-connector-c \
         mongo-c-driver \
+        libressl \
         sqlite \
         sqlite-libs \
         && \

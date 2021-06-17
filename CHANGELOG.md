@@ -1,3 +1,13 @@
+## 1.9.10 2021-06-17 <dave at tiredofit dot ca>
+
+   ### Added
+      - Coturn 4.5.2
+      - Alpine 3.14 Base
+
+   ### Changed
+      - Change libressl to openssl
+
+
 ## 1.9.9.1 2020-06-05 <dave at tiredofit dot ca>
 
    ### Changed
