@@ -8,5 +8,5 @@ check_container_initialized
 check_service_initialized init
 
 liftoff
-print_info "Starting coturn ${COTURN_VERSION}"
+print_start "Starting coturn ${COTURN_VERSION}"
 exec /usr/bin/turnserver -c ${CONFIG_PATH}${CONFIG_FILE}
