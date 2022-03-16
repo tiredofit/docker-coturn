@@ -621,7 +621,7 @@ EOF
 
             authentication=$(cat<<EOF
 fingerprint
-lt-cred-mech
+
 no-cli
 use-auth-secret
 
