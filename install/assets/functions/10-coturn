@@ -613,35 +613,16 @@ EOF
 ${credentials}
 
 lt-cred-mech
-
-
 EOF
             			    )
         ;;
 	    "SECRET" | "secret" | "TIMELIMITED" | "timelimited" )
             print_debug "Setting Authentication Mode to Secrets (Time limited)"
-            if [ ! -f "$CREDENTIALS_FILE" ]; then
-            	print_notice "No Credentials File, Creating User Account: coturn"
-            	echo "coturn:coturn" > ${CREDENTIALS_FILE}
-            fi
-            print_debug "Parsing Credentials File"
-            while IFS="" read -r line || [ -n "$line" ]
-                do
-                if [[ "${line}" == *":"* ]] ; then
-                    username=$(echo $line | cut -d : -f 1)
-                    password=$(echo $line | cut -d : -f 2)
-                    keyfile=$(turnadmin -k -u ${username} -p ${password})
-                    credentials=$(echo "${credentials}"; cat<<EOF
-user=${username}:${keyfile}
 
-EOF
-    		                    )
-                fi
-            done < ${CREDENTIALS_FILE}
             authentication=$(cat<<EOF
 use-auth-secret
 
-${credentials}
+
 EOF
 							)
         ;;
