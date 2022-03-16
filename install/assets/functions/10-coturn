@@ -620,6 +620,9 @@ EOF
             print_debug "Setting Authentication Mode to Secrets (Time limited)"
 
             authentication=$(cat<<EOF
+fingerprint
+lt-cred-mech
+no-cli
 use-auth-secret
 
 
