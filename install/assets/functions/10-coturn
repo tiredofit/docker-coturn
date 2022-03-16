@@ -140,7 +140,7 @@ EOF
 
 	certificates_check_dhparam() {
 		print_debug "Certificates: DH Param - Checking Existence of ${TLS_SERVER_DH_PARAM_FILE}"
-		if [ ! -f TLS_DH_PARAM_FILE ] ; then
+		if [ ! -f ${TLS_DH_PARAM_FILE} ] ; then
 			    certificates_create_dhparam
 		fi
 	}
@@ -739,7 +739,7 @@ ${tls}
 ${authentication}
 ${oauth}
 ${oauth_server_name}
-realm=${realm}
+realm=${REALM}
 
 ## CLI Interface
 ${cli}
