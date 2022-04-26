@@ -1,3 +1,9 @@
+## 1.9.12 2022-04-26 <dave at tiredofit dot ca>
+
+   ### Changed
+      - Move logrotate directory
+
+
 ## 1.9.11 2021-11-24 <dave at tiredofit dot ca>
 
    ### Added
