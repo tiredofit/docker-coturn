@@ -80,7 +80,7 @@ EOF
 					print_debug "Certificates: No CA Found - Creating before generating certificates"
 					certificates_create_certificate_authority
 				fi
-			fi            
+			fi
             CERT_SUBJECT="${CA_SUBJECT}$(basename ${1%%.*})"
 
 	    	if var_true $CREATE_CA ; then
@@ -95,8 +95,8 @@ EOF
 				if [ ! -f ${1%%.*}.key ] ; then
 					print_debug "Certificates: Creating Certificate: ${1}"
 					silent eval "libressl req \
-						  -new -x509 -nodes -days 3650 
-						  -config /tmp/libressl.cnf 
+						  -new -x509 -nodes -days 3650
+						  -config /tmp/libressl.cnf
 						  -out ${1%%.*}.crt \
 						  -keyout ${1%%.*}.key"
 				fi
@@ -140,7 +140,7 @@ EOF
 
 	certificates_check_dhparam() {
 		print_debug "Certificates: DH Param - Checking Existence of ${TLS_SERVER_DH_PARAM_FILE}"
-		if [ ! -f TLS_DH_PARAM_FILE ] ; then
+		if [ ! -f ${TLS_DH_PARAM_FILE} ] ; then
 			    certificates_create_dhparam
 		fi
 	}
@@ -244,21 +244,21 @@ create_config() {
 	    "MONGODB" | "mongodb" | "MONGO" | "mongo" )
 	        print_debug "Setting Mongo DB Type"
 	        DB_PORT=${DB_PORT:-"27017"}
-            sanity_db mongo 
+            sanity_db mongo
             db_ready mongo
             db_string="mongo-userdb=\"mongodb://[${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}\""
 	    ;;
 	    "MYSQL" | "mysql" | "MARIADB" | "MARIADB" )
 	        print_debug "Setting MariaDB DB Type"
 	        DB_PORT=${DB_PORT:-"3306"}
-            sanity_db mariadb 
+            sanity_db mariadb
             db_ready mariadb
             db_string="mysql-userdb=\"host=${DB_HOST} dbname=${DB_NAME} user=${DB_USER} password=${DB_PASS} port=${DB_PORT} connect_timeout=${DB_TIMEOUT_CONNECT} read_timeout=${DB_TIMEOUT_READ}\""
 	    ;;
 	    "POSTGRES" | "postgres" | "PSQL" | "psql" | "POSTGRESQL" | "postgresql" )
 	        print_debug "Setting Postgres DB Type"
 	        DB_PORT=${DB_PORT:-"5472"}
-            sanity_db postgres 
+            sanity_db postgres
             db_ready postgres
             db_string="psql-userdb=\"host=${DB_HOST} dbname=${DB_NAME} user=${DB_USER} password=${DB_PASS} connect_timeout=${DB_TIMEOUT_CONNECT}\""
 	    ;;
@@ -303,7 +303,7 @@ alternate-server=${ALTERNATE_SERVER}
 EOF
         )
     fi
-	
+
 	if [ -n "${AUX_SERVER}" ]; then
 		aux_server_array=$(echo $AUX_SERVER | tr "," "\n")
 		for aux in $aux_server_array
@@ -613,35 +613,19 @@ EOF
 ${credentials}
 
 lt-cred-mech
-
-
 EOF
             			    )
         ;;
 	    "SECRET" | "secret" | "TIMELIMITED" | "timelimited" )
             print_debug "Setting Authentication Mode to Secrets (Time limited)"
-            if [ ! -f "$CREDENTIALS_FILE" ]; then
-            	print_notice "No Credentials File, Creating User Account: coturn"
-            	echo "coturn:coturn" > ${CREDENTIALS_FILE}
-            fi
-            print_debug "Parsing Credentials File"
-            while IFS="" read -r line || [ -n "$line" ]
-                do
-                if [[ "${line}" == *":"* ]] ; then
-                    username=$(echo $line | cut -d : -f 1)
-                    password=$(echo $line | cut -d : -f 2)
-                    keyfile=$(turnadmin -k -u ${username} -p ${password})
-                    credentials=$(echo "${credentials}"; cat<<EOF
-user=${username}:${keyfile}
 
-EOF
-    		                    )
-                fi
-            done < ${CREDENTIALS_FILE}
             authentication=$(cat<<EOF
+fingerprint
+
+no-cli
 use-auth-secret
 
-${credentials}
+
 EOF
 							)
         ;;
@@ -698,7 +682,7 @@ EOF
     fi
 
 	cat <<EOF > ${CONFIG_PATH}${CONFIG_FILE}
-# Custom Generated Kopano GRAPI Server Configuration! Do not edit, instead set ENV Vars
+# Custom coturn Configuration! Do not edit, instead set ENV Vars
 # If you want to use your own configuration files set SETUP_TYPE=MANUAL when starting container
 # Last Generated on `date`
 
@@ -739,7 +723,7 @@ ${tls}
 ${authentication}
 ${oauth}
 ${oauth_server_name}
-${realm}
+realm=${REALM}
 
 ## CLI Interface
 ${cli}
@@ -772,4 +756,3 @@ total-quota=${QUOTA_TOTAL}
 user-quota=${QUOTA_USER}
 EOF
 }
-

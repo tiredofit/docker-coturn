@@ -61,7 +61,7 @@ RUN set -x && \
     rm -rf /usr/src /var/cache/apk
 
 ### Networking Configuration
-EXPOSE 443 3478 3478/udp 3479 5349 5350
+EXPOSE 443 3478 3478/udp 3479/udp 5349 5350
 
 ### Files Addition
 ADD install /
