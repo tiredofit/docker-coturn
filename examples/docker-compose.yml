@@ -1,32 +1,35 @@
-version: '3.7'
+version: '2.4'
 services:
   
   coturn-app:
     image: tiredofit/coturn:latest
     container_name: coturn-app
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.coturn.rule=Host(`turn.example.com`)
     volumes:
-    - ./data:/data
-    - ./logs:/var/log/coturn
+      #- /var/local/data/traefik/certs/dump/turn.example.com:/certs
+      - ./data:/data
+      - ./logs:/logs
     environment:
-    - CONTAINER_NAME=coturn-app
+      - TIMEZONE=America/Vancouver
+      - CONTAINER_NAME=coturn-app
 
-    - LISTENING_PORT=443
-    - ALT_LISTENING_PORT=3478
-    - LISTEN_IPS="111.222.250 112.233.250"
-    - SECRET=supersecretpassword
-    - REALM=turnserver.local
+      - SETUP_MODE=bbb
+
+      - SECRET=supersecretpassword
+      - REALM=turnserver.local
     
-    - TLS_CERT=tls.crt
-    - TLS_KEY=tls.key
-    - DH_FILE=dhparam.pem
+      - TLS_CERT=cert.pem
+      - TLS_KEY=key.pem
     networks:
-      - internal
+      - proxy
       - services
     restart: always
 
 networks:
-  internal:
-    external: false
+  proxy:
+    external:true
   services:
     external: true
 
