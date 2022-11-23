@@ -6,7 +6,13 @@ PROCESS_NAME="coturn"
 
 check_container_initialized
 check_service_initialized init
-
 liftoff
+
+ case "${LOG_TYPE,,}" in
+    "both" | "console" )
+        SHOW_OUTPUT=TRUE
+    ;;
+esac
+
 print_start "Starting coturn ${COTURN_VERSION}"
-exec /usr/bin/turnserver -c ${CONFIG_PATH}${CONFIG_FILE}
+silent s6-setuidgid coturn /usr/bin/turnserver -c "${CONFIG_PATH}"/"${CONFIG_FILE}"

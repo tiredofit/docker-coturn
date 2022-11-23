@@ -1,0 +1,21 @@
+#!/command/with-contenv bash
+
+source /assets/functions/00-container
+prepare_service 10-coturn
+PROCESS_NAME="coturn"
+
+if var_true "${ENABLE_TLS}" ; then
+	if [ -f "${TLS_CERT_FILE}" ] && [ -f "${TLS_KEY_FILE}" ] ; then
+		if var_true "${RELOAD_ON_CERT_CHANGE}" ; then
+			print_notice "Enabling Auto Reload of Coturn Configuration when certificate files change"
+		else
+			service_stop 11-reload-on-cert-change
+		fi
+	else
+		service_stop 11-reload-on-cert-change
+	fi
+else
+	service_stop 11-reload-on-cert-change
+fi
+
+liftoff

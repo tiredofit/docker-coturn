@@ -1,7 +1,9 @@
-FROM docker.io/tiredofit/alpine:3.16
+FROM docker.io/tiredofit/alpine:3.17
 LABEL maintainer="Dave Conroy (github.com/tiredofit)"
 
-ENV COTURN_VERSION=4.5.2
+ENV COTURN_VERSION=4.5.2 \
+    IMAGE_NAME=tiredofit/coturn \
+    IMAGE_REPO_URL=https://github.com/tiredofit/docker-coturn
 
 ### Build Dependencies
 RUN set -x && \
@@ -13,14 +15,17 @@ RUN set -x && \
         build-base \
         coreutils \
         autoconf \
+        cmake \
         g++ \
+        git \
         hiredis-dev \
         libevent-dev \
         libtool \
+        libmicrohttpd-dev \
         linux-headers \
         mariadb-connector-c-dev \
         mongo-c-driver-dev \
-        libressl-dev \
+        openssl-dev \
         postgresql-dev \
         sqlite-dev \
         && \
@@ -28,22 +33,53 @@ RUN set -x && \
 ### Run Depedencies
     apk add -t .coturn-run-deps \
         hiredis \
+        inotify-tools \
         libcrypto1.1 \
         libevent \
         libpq \
         libssl1.1 \
         libstdc++ \
+        mariadb-client \
         mariadb-connector-c \
         mongo-c-driver \
-        libressl \
+        postgresql-client\
+        libmicrohttpd \
+        openssl \
         sqlite \
         sqlite-libs \
         && \
     \
-### Compile Coturn
+### Build Prometheus Clients
+    git clone https://github.com/digitalocean/prometheus-client-c /usr/src/promclient && \
+    cd /usr/src/promclient && \
+    git checkout v0.1.3 && \
+    cd /usr/src/promclient/prom && \
+    TEST=0 cmake -G "Unix Makefiles" \
+                 -DCMAKE_INSTALL_PREFIX=/usr \
+                 -DCMAKE_SKIP_BUILD_RPATH=TRUE \
+                 -DCMAKE_C_FLAGS="-DPROM_LOG_ENABLE -g -O3" \
+                 . \
+                 && \
+    make && \
+    make install && \
+    \
+    cd /usr/src/promclient/promhttp && \
+    sed -i 's/\&promhttp_handler/(MHD_AccessHandlerCallback)\&promhttp_handler/' src/promhttp.c && \
+    cd /usr/src/promclient/promhttp && \
+    TEST=0 cmake -G "Unix Makefiles" \
+                 -DCMAKE_INSTALL_PREFIX=/usr \
+                 -DCMAKE_SKIP_BUILD_RPATH=TRUE \
+                 -DCMAKE_C_FLAGS="-g -O3" \
+                 . \
+                 && \
+        make VERBOSE=1 && \
+        make install && \
+    \
+    ### Compile Coturn
     mkdir -p /usr/src/coturn && \
     curl -ssL https://github.com/coturn/coturn/archive/${COTURN_VERSION}.tar.gz | tar xvfz - --strip 1 -C /usr/src/coturn && \
     cd /usr/src/coturn && \
+    ln -s /usr/lib/pkgconfig/libmariadb.pc /usr/lib/pkgconfig/mariadb.pc && \
     ./configure --prefix=/usr \
         --turndbdir=/data \
         --disable-rpath \
@@ -58,10 +94,10 @@ RUN set -x && \
     \
 ### Cleanup
     apk del .coturn-build-deps && \
-    rm -rf /usr/src /var/cache/apk
+    rm -rf /usr/src/* /var/cache/apk /tmp/*
 
 ### Networking Configuration
 EXPOSE 443 3478 3478/udp 3479 5349 5350
 
 ### Files Addition
-ADD install /
+COPY install /
