@@ -1,4 +1,4 @@
-FROM docker.io/tiredofit/alpine:3.17
+FROM docker.io/tiredofit/alpine:3.18
 LABEL maintainer="Dave Conroy (github.com/tiredofit)"
 
 ENV COTURN_VERSION=4.5.2 \
